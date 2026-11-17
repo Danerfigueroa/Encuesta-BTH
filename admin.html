@@ -1,0 +1,416 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel BTH - Administrador</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 18px;
+            font-family: Arial, sans-serif;
+            background: #eef3f8;
+            color: #172b4d;
+        }
+
+        .contenedor {
+            max-width: 750px;
+            margin: 25px auto;
+        }
+
+        .tarjeta {
+            background: white;
+            padding: 22px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px #00000012;
+            margin-bottom: 20px;
+        }
+
+        h1, h2, h3 {
+            color: #173b70;
+        }
+
+        input, button {
+            width: 100%;
+            padding: 13px;
+            margin: 8px 0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        input {
+            border: 1px solid #ccd5e0;
+        }
+
+        button {
+            border: none;
+            background: #1769aa;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .encuesta {
+            border: 1px solid #dce3eb;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            overflow-wrap: anywhere;
+        }
+
+        .oculto {
+            display: none;
+        }
+
+        .respuesta {
+            margin: 10px 0;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .barra {
+            background: #dce6f1;
+            height: 13px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+
+        .relleno {
+            height: 13px;
+            background: #1769aa;
+            border-radius: 10px;
+        }
+
+        #mensaje {
+            color: #b42318;
+        }
+
+        .subtitulo {
+            color: #64748b;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="contenedor">
+
+    <!-- INICIO DE SESIÓN -->
+
+    <div class="tarjeta" id="login">
+        <h1>Panel BTH</h1>
+        <p>Acceso exclusivo para el administrador.</p>
+
+        <input id="correo" type="email"
+            placeholder="Correo electrónico">
+
+        <input id="contrasena" type="password"
+            placeholder="Contraseña">
+
+        <button id="entrar">Iniciar sesión</button>
+
+        <p id="mensaje"></p>
+    </div>
+
+
+    <!-- PANEL PRINCIPAL -->
+
+    <div class="oculto" id="panel">
+
+        <div class="tarjeta">
+            <h1>Resultados de la encuesta</h1>
+            <p class="subtitulo">
+                Proyecto BTH - Tinguipaya
+            </p>
+
+            <h2 id="total">Encuestas recibidas: 0</h2>
+
+            <p class="subtitulo">
+                Actualización automática cada 10 segundos.
+            </p>
+
+            <button id="actualizar">
+                Actualizar resultados
+            </button>
+
+            <button id="salir">
+                Cerrar sesión
+            </button>
+        </div>
+
+
+        <!-- ESTADÍSTICAS -->
+
+        <div class="tarjeta">
+            <h2>Estadísticas generales</h2>
+            <div id="estadisticas">
+                Esperando resultados...
+            </div>
+        </div>
+
+
+        <!-- RESPUESTAS -->
+
+        <div class="tarjeta">
+            <h2>Encuestas recibidas</h2>
+            <div id="resultados">
+                Aquí aparecerán las respuestas.
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- CONEXIÓN CON SUPABASE -->
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+
+    const SUPABASE_URL =
+        "https://laxllktmjckmwjfdqprq.supabase.co";
+
+    const SUPABASE_KEY =
+        "sb_publishable_9PeOUFxJHRtZZk4aivhFow_ZG9VsUD5";
+
+
+    const cliente = window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY
+    );
+
+    let actualizador = null;
+
+    const login = document.getElementById("login");
+    const panel = document.getElementById("panel");
+    const mensaje = document.getElementById("mensaje");
+
+
+    // INICIAR SESIÓN
+
+    document.getElementById("entrar").onclick = async () => {
+
+        mensaje.textContent = "Comprobando acceso...";
+
+        const { error } = await cliente.auth.signInWithPassword({
+            email: document.getElementById("correo").value,
+            password: document.getElementById("contrasena").value
+        });
+
+        if (error) {
+            mensaje.textContent =
+                "No se pudo iniciar sesión. Revisa tus datos.";
+            return;
+        }
+
+        login.classList.add("oculto");
+        panel.classList.remove("oculto");
+
+        cargarResultados();
+
+        if (actualizador) {
+            clearInterval(actualizador);
+        }
+
+        actualizador = setInterval(
+            cargarResultados,
+            10000
+        );
+    };
+
+
+    // GENERAR ESTADÍSTICAS
+
+    function mostrarEstadisticas(encuestas) {
+
+        const espacio =
+            document.getElementById("estadisticas");
+
+        espacio.replaceChildren();
+
+        const preguntasImportantes = [
+            { indice: 2, titulo: "Muebles más solicitados" },
+            { indice: 8, titulo: "Material preferido" },
+            { indice: 11, titulo: "Presupuesto disponible" },
+            { indice: 15, titulo: "Intención de compra" },
+            { indice: 16, titulo: "Opinión sobre madera y metal" }
+        ];
+
+        preguntasImportantes.forEach(grupo => {
+
+            const conteo = {};
+
+            encuestas.forEach(encuesta => {
+
+                const respuesta =
+                    encuesta.respuestas?.[grupo.indice]?.respuesta;
+
+                if (respuesta) {
+                    const valor = String(respuesta).trim();
+
+                    conteo[valor] =
+                        (conteo[valor] || 0) + 1;
+                }
+            });
+
+            const tarjeta = document.createElement("div");
+            tarjeta.className = "encuesta";
+
+            const titulo = document.createElement("h3");
+            titulo.textContent = grupo.titulo;
+
+            tarjeta.appendChild(titulo);
+
+            const total = Object.values(conteo)
+                .reduce((a, b) => a + b, 0);
+
+            if (total === 0) {
+
+                const texto = document.createElement("p");
+                texto.textContent =
+                    "Todavía no hay respuestas.";
+
+                tarjeta.appendChild(texto);
+            }
+
+            Object.entries(conteo)
+                .sort((a, b) => b[1] - a[1])
+                .forEach(([opcion, cantidad]) => {
+
+                    const porcentaje =
+                        Math.round(cantidad / total * 100);
+
+                    const texto = document.createElement("p");
+
+                    texto.textContent =
+                        `${opcion}: ${cantidad} (${porcentaje}%)`;
+
+                    const barra = document.createElement("div");
+                    barra.className = "barra";
+
+                    const relleno = document.createElement("div");
+                    relleno.className = "relleno";
+                    relleno.style.width = porcentaje + "%";
+
+                    barra.appendChild(relleno);
+
+                    tarjeta.appendChild(texto);
+                    tarjeta.appendChild(barra);
+                });
+
+            espacio.appendChild(tarjeta);
+        });
+    }
+
+
+    // CARGAR RESULTADOS
+
+    async function cargarResultados() {
+
+        const contenedor =
+            document.getElementById("resultados");
+
+        contenedor.textContent =
+            "Cargando respuestas...";
+
+        const { data, error } = await cliente
+            .from("respuestas_encuesta")
+            .select("*")
+            .order("creado_en", { ascending: false });
+
+        if (error) {
+
+            contenedor.textContent =
+                "Error al cargar las respuestas.";
+
+            console.error(error);
+            return;
+        }
+
+        document.getElementById("total").textContent =
+            "Encuestas recibidas: " + data.length;
+
+        mostrarEstadisticas(data);
+
+        contenedor.replaceChildren();
+
+        data.forEach((encuesta, indice) => {
+
+            const tarjeta = document.createElement("div");
+            tarjeta.className = "encuesta";
+
+            const titulo = document.createElement("h3");
+
+            titulo.textContent =
+                "Encuesta " + (indice + 1);
+
+            tarjeta.appendChild(titulo);
+
+            const fecha = document.createElement("p");
+
+            fecha.textContent =
+                "Fecha: " +
+                new Date(encuesta.creado_en).toLocaleString();
+
+            tarjeta.appendChild(fecha);
+
+            (encuesta.respuestas || []).forEach(item => {
+
+                const respuesta = document.createElement("div");
+                respuesta.className = "respuesta";
+
+                const pregunta = document.createElement("strong");
+                pregunta.textContent = item.pregunta || "";
+
+                const valor = document.createElement("p");
+                valor.textContent =
+                    item.respuesta || "Sin respuesta";
+
+                respuesta.appendChild(pregunta);
+                respuesta.appendChild(valor);
+
+                tarjeta.appendChild(respuesta);
+            });
+
+            contenedor.appendChild(tarjeta);
+        });
+    }
+
+
+    // ACTUALIZAR MANUALMENTE
+
+    document.getElementById("actualizar").onclick =
+        cargarResultados;
+
+
+    // CERRAR SESIÓN
+
+    document.getElementById("salir").onclick = async () => {
+
+        if (actualizador) {
+            clearInterval(actualizador);
+            actualizador = null;
+        }
+
+        await cliente.auth.signOut();
+
+        panel.classList.add("oculto");
+        login.classList.remove("oculto");
+
+        document.getElementById("contrasena").value = "";
+    };
+
+</script>
+
+</body>
+</html>
